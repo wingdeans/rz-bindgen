@@ -1,0 +1,43 @@
+name: deploy-rz-bindgen-pages
+on:
+  push:
+    paths:
+    - 'src/**.py'
+    - 'src/**.pyi'
+    - 'src/**.i'
+    - 'meson.build'
+    - 'meson_options.txt'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Github Pages
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout rizin
+      uses: actions/checkout@v3
+      with:
+        repository: wingdeans/rizin
+        ref: header-types
+        path: rizin
+
+    - name: Install deps
+      run: |
+        pip install meson ninja
+
+    - name: Build rizin
+      run: |
+        meson setup build
+        ninja -C build
+      working-directory: rizin
+
+    - name: Checkout rz-bindgen
+      uses: actions/checkout@v3
+      with:
+        path: rz-bindgen
+
+    - name: Run rz-bindgen
+      run: |
+        meson setup -Drizin_inc_path="$GITHUB_WORKSPACE/rizin/include" build
+        ninja -C build
+      working-directory: rz-bindgen
