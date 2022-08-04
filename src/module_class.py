@@ -5,7 +5,8 @@ SPDX-License-Identifier: LGPL-3.0-only
 Specifies a SWIG class
 """
 
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set, DefaultDict, Optional, overload
+import os
 
 from clang.wrapper import (
     CursorKind,
@@ -28,9 +29,38 @@ class ModuleClass:
     Contains a struct and SWIG %extend
     """
 
+    name: str
     struct: Struct
     struct_writer: BufferedWriter
     funcs: List[ModuleFunc]
+
+    sphinx_fields: DefaultDict[str, BufferedWriter]
+    sphinx_funcs: Dict[str, ModuleFunc]
+    sphinx_methods: Dict[str, ModuleFunc]
+
+    @overload
+    def __init__(
+        self,
+        header: Header,
+        *,
+        struct: str,
+        rename: str,
+        ignore_fields: Optional[Set[str]] = None,
+        rename_fields: Optional[Dict[str, str]] = None,
+    ):
+        pass
+
+    @overload
+    def __init__(
+        self,
+        header: Header,
+        *,
+        typedef: str,
+        rename: Optional[str] = None,
+        ignore_fields: Optional[Set[str]] = None,
+        rename_fields: Optional[Dict[str, str]] = None,
+    ):
+        pass
 
     def __init__(
         self,
@@ -60,12 +90,19 @@ class ModuleClass:
         self.struct_writer = BufferedWriter()
         self.funcs = []
 
-        if rename:
-            self.struct_writer.line(
-                f"typedef struct {struct_cursor.spelling} {rename};",
-                f"%rename {struct_cursor.spelling} {rename};",
-            )
+        assert rename
+        self.name = rename
+        self.struct_writer.line(
+            f"typedef struct {struct_cursor.spelling} {rename};",
+            f"%rename {struct_cursor.spelling} {rename};",
+        )
 
+        # [[Docs]]
+        self.sphinx_fields = DefaultDict(BufferedWriter)
+        self.sphinx_funcs = {}
+        self.sphinx_methods = {}
+
+        # Fields
         self.gen_struct(
             struct_cursor, ignore_fields=ignore_fields, rename_fields=rename_fields
         )
@@ -97,7 +134,7 @@ class ModuleClass:
         header: Header,
         name: str,
         *,
-        rename: Optional[str] = None,
+        rename: str,
         default_args: Optional[Dict[str, str]] = None,
         typemaps: Optional[List[ModuleTypemap]] = None,
     ) -> None:
@@ -107,21 +144,25 @@ class ModuleClass:
         The first argument of the specified C function will be the class struct
         """
         header.used.add(name)
-        binderfunc = ModuleFunc(
+        modulefunc = ModuleFunc(
             header.funcs[name],
             FuncKind.THIS,
             name=rename,
             default_args=default_args,
             typemaps=typemaps,
         )
-        self.funcs.append(binderfunc)
+        self.funcs.append(modulefunc)
+
+        # [[Docs]]
+        if rizin.enable_sphinx:
+            self.sphinx_funcs[rename] = modulefunc
 
     def add_func(
         self,
         header: Header,
         name: str,
         *,
-        rename: Optional[str] = None,
+        rename: str,
         default_args: Optional[Dict[str, str]] = None,
         typemaps: Optional[List[ModuleTypemap]] = None,
     ) -> None:
@@ -129,14 +170,18 @@ class ModuleClass:
         Add function in header with specified name as static function of class
         """
         header.used.add(name)
-        binderfunc = ModuleFunc(
+        modulefunc = ModuleFunc(
             header.funcs[name],
             FuncKind.STATIC,
             name=rename,
             default_args=default_args,
             typemaps=typemaps,
         )
-        self.funcs.append(binderfunc)
+        self.funcs.append(modulefunc)
+
+        # [[Docs]]
+        if rizin.enable_sphinx:
+            self.sphinx_funcs[rename] = modulefunc
 
     def add_prefixed_methods(self, header: Header, prefix: str) -> None:
         """
@@ -167,10 +212,14 @@ class ModuleClass:
 
         for func in filter(predicate, header.funcs.values()):
             header.used.add(func.spelling)
-            binderfunc = ModuleFunc(
-                func, FuncKind.THIS, name=func.spelling[len(prefix) :]
-            )
-            self.funcs.append(binderfunc)
+
+            rename = func.spelling[len(prefix) :]
+            modulefunc = ModuleFunc(func, FuncKind.THIS, name=rename)
+            self.funcs.append(modulefunc)
+
+            # [[Doc]]
+            if rizin.enable_sphinx:
+                self.sphinx_funcs[rename] = modulefunc
 
     def add_prefixed_funcs(self, header: Header, prefix: str) -> None:
         """
@@ -188,10 +237,14 @@ class ModuleClass:
 
         for func in filter(predicate, header.funcs.values()):
             header.used.add(func.spelling)
-            modulefunc = ModuleFunc(
-                func, FuncKind.STATIC, name=func.spelling[len(prefix) :]
-            )
+
+            rename = func.spelling[len(prefix) :]
+            modulefunc = ModuleFunc(func, FuncKind.STATIC, name=rename)
             self.funcs.append(modulefunc)
+
+            # [[Doc]]
+            if rizin.enable_sphinx:
+                self.sphinx_funcs[rename] = modulefunc
 
     def gen_struct(
         self,
@@ -224,6 +277,18 @@ class ModuleClass:
                         continue
                     decl = rizin.stringify_decl(field, field.type)
                     writer.line(f"{decl};")
+
+                    # [[Docs]]
+                    if rizin.enable_sphinx:
+                        if field.spelling in rename_fields:
+                            name = rename_fields[field.spelling]
+                        else:
+                            name = field.spelling
+                        field_type_py = rizin.stringify_type_py(field, field.type)
+                        self.sphinx_fields[name].line(
+                            f"   .. py:property:: {name}",
+                            f"      :type: {field_type_py}",
+                        )
                 elif field.kind not in [CursorKind.STRUCT_DECL, CursorKind.UNION_DECL]:
                     raise Exception(
                         f"Unexpected struct child of kind: {field.kind} at {field.location}"
@@ -251,3 +316,27 @@ class ModuleClass:
             for func in self.funcs:
                 func.write(writer)
         writer.line("}")
+
+    def write_sphinx(self, path: str) -> None:
+        """
+        Writes class documentation to <output>/sphinx/<self.name>.rst
+        """
+        with open(
+            os.path.join(path, f"{self.name}.rst"), "w", encoding="utf-8"
+        ) as output:
+            writer = DirectWriter(output)
+            writer.line(self.name, "=" * len(self.name))  # Title
+            writer.line(".. py:class:: " + self.name)
+            writer.line("")
+
+            for field_name in self.sphinx_fields:
+                self.sphinx_fields[field_name].write(writer)
+                writer.line("")
+
+            for _, func in sorted(self.sphinx_funcs.items()):
+                func.sphinx.write(writer)
+                writer.line("")
+
+            for _, method in sorted(self.sphinx_methods.items()):
+                method.sphinx.write(writer)
+                writer.line("")

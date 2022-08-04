@@ -33,12 +33,14 @@ class ModuleFunc:
     contract: BufferedWriter
     typemaps: List[ModuleTypemap]
 
+    sphinx: BufferedWriter
+
     def __init__(
         self,
         func: Func,
         kind: FuncKind,
         *,
-        name: Optional[str] = None,
+        name: str,
         generic_ret: bool = False,
         generic_args: Optional[Set[str]] = None,
         default_args: Optional[Dict[str, str]] = None,
@@ -46,6 +48,10 @@ class ModuleFunc:
     ):
         writer = BufferedWriter()
         self.writer = writer
+
+        # [[Docs]]
+        if rizin.enable_sphinx:
+            self.sphinx = BufferedWriter()
 
         ### Typemaps ###
         self.typemaps = typemaps or []
@@ -66,6 +72,8 @@ class ModuleFunc:
 
         args_outer = []
         args_inner = []
+        args_python = []
+
         for arg in args:
             assert arg.kind == CursorKind.PARM_DECL
             if arg.spelling == "self":
@@ -84,8 +92,16 @@ class ModuleFunc:
                 )
                 if arg.spelling in default_args:
                     arg_outer += f" = {default_args[arg.spelling]}"
+
             args_inner.append(arg_inner)
             args_outer.append(arg_outer)
+
+            # [[Docs]]
+            if rizin.enable_sphinx:
+                arg_python = rizin.stringify_type_py(
+                    arg, arg.type, generic=(arg.spelling in generic_args)
+                )
+                args_python.append(f"{arg_inner}: {arg_python}")
 
         # Sanity check
         for generic_arg in generic_args:
@@ -93,24 +109,46 @@ class ModuleFunc:
         for default_arg in default_args.keys():
             assert default_arg in args_inner, "nonexistent default argument specified"
 
+        # [[Docs]]
+        if rizin.enable_sphinx:
+            args_python_str = ", ".join(args_python)
+            ret_python = rizin.stringify_type_py(
+                func, func.result_type, generic=generic_ret
+            )
+            ret_python_str = f" -> {ret_python}" if ret_python else ""
+            if kind == FuncKind.THIS:
+                self.sphinx.line(
+                    f"   .. py:method:: {name}({args_python_str}){ret_python_str}"
+                )
+            else:
+                self.sphinx.line(
+                    f"   .. py:staticmethod:: {name}({args_python_str}){ret_python_str}"
+                )
+
+            if func.spelling in rizin.doxygen_funcs:
+                mappings = rizin.doxygen_funcs[func.spelling]
+                links = ", ".join(
+                    [f"`{filename} <doxygen/{href}>`__" for href, filename in mappings]
+                )
+                self.sphinx.line(
+                    f"   ``{func.spelling}``: " + links,
+                )
+
+        args_outer_str = ", ".join(args_outer)
+        args_inner_str = ", ".join(args_inner)
+
         if kind == FuncKind.CONSTRUCTOR:
-            args_outer_str = ", ".join(args_outer)
-            args_inner_str = ", ".join(args_inner)
             writer.line(f"{name}({args_outer_str}) {{")
         elif kind == FuncKind.DESTRUCTOR:
-            args_outer_str = ", ".join(args_outer)
             args_inner_str = ", ".join(["$self"] + args_inner)
             writer.line(f"~{name}({args_outer_str}) {{")
         elif kind == FuncKind.THIS:
-            args_outer_str = ", ".join(args_outer)
             args_inner_str = ", ".join(["$self"] + args_inner)
             decl = rizin.stringify_decl(
                 func, func.result_type, name=name, generic=generic_ret
             )
             writer.line(f"{decl}({args_outer_str}) {{")
         elif kind == FuncKind.STATIC:
-            args_outer_str = ", ".join(args_outer)
-            args_inner_str = ", ".join(args_inner)
             decl = rizin.stringify_decl(
                 func, func.result_type, name=name, generic=generic_ret
             )

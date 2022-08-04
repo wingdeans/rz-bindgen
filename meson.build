@@ -7,6 +7,9 @@ clang_path = get_option('clang_path')
 clang_args = get_option('clang_args')
 rizin_inc_path = get_option('rizin_inc_path')
 
+doxygen_html_path = get_option('doxygen_html_path')
+sphinx_enabled = doxygen_html_path != ''
+
 if clang_path == ''
   llvm = dependency('llvm', required: false)
   if llvm.found()
@@ -43,19 +46,19 @@ endif
 swig_sources = custom_target(
   'swig_sources',
   input: 'src' / 'main.py',
-  output: 'rizin.i',
+  output: ['rizin.i'] + (sphinx_enabled ? ['sphinx'] : []),
   command: [
     py, '@INPUT@',
-    '-o', '@OUTPUT@',
+    '-o', '@OUTDIR@',
     '--clang-path', clang_path,
     '--clang-args', clang_args,
     '--rizin-inc-path', rizin_inc_path
-  ]
+  ] + (sphinx_enabled ? ['--doxygen-html-path', doxygen_html_path] : [])
 )
 
 swig_output = custom_target(
   'swig_output',
-  input: swig_sources,
+  input: swig_sources[0],
   depend_files: ['src' / 'rizin_pre.i', 'src' / 'rizin_post.i'],
   output: ['rizin.py', 'rizin_wrap.cxx'],
   command: [
@@ -88,4 +91,17 @@ py.extension_module(
 
 if get_option('plugin').enabled()
   subdir('plugin')
+endif
+
+if sphinx_enabled
+  custom_target(
+    'sphinx',
+    input: swig_sources[1],
+    output: 'sphinx_output',
+    command: [
+      find_program('sphinx-build'),
+      '@INPUT@',
+      '@OUTPUT@'
+    ]
+  )
 endif

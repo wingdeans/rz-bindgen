@@ -3,11 +3,13 @@ SPDX-FileCopyrightText: 2022 wingdeans <wingdeans@protonmail.com>
 SPDX-License-Identifier: LGPL-3.0-only
 """
 
-from typing import cast
-from argparse import ArgumentParser
+from typing import List, Tuple, Optional, cast
 
 import os
 import shlex  # clang_arg string -> argv
+
+from html.parser import HTMLParser  # parse doxygen html
+from argparse import ArgumentParser
 
 from clang.cindex import Config
 
@@ -25,6 +27,7 @@ parser.add_argument("--output", "-o", required=True)
 parser.add_argument("--clang-path", required=True)
 parser.add_argument("--clang-args", required=True)
 parser.add_argument("--rizin-inc-path", required=True)
+parser.add_argument("--doxygen-html-path")
 args = parser.parse_args()
 
 Config.set_library_path(cast(str, args.clang_path))
@@ -47,6 +50,69 @@ for segments in [
 clang_args.append("-DRZ_BINDINGS")
 Header.clang_args = clang_args
 Header.rizin_inc_path = rizin_inc_path
+
+# [[Docs]]
+doxygen_html_path = cast(Optional[str], args.doxygen_html_path)
+if doxygen_html_path is not None:
+    rizin.enable_sphinx = True
+    rizin.doxygen_html_path = doxygen_html_path
+
+    class FuncParser(HTMLParser):
+        """
+        Parse doxygen globals_func.html list elements
+        """
+
+        func: Optional[str]
+        in_a: bool
+        a_href: Optional[str]
+
+        mappings: List[Tuple[str, str]]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.reset()
+
+        def reset(self) -> None:
+            super().reset()
+            self.func = None
+            self.in_a = False
+            self.a_href = None
+            self.mappings = []
+
+        def handle_starttag(
+            self, tag: str, attrs: List[Tuple[str, Optional[str]]]
+        ) -> None:
+            if tag == "a":
+                self.in_a = True
+                self.a_href = next(value for key, value in attrs if key == "href")
+
+        def handle_data(self, data: str) -> None:
+            if self.in_a:
+                assert self.a_href
+                self.mappings.append((self.a_href, data))
+            elif not self.func:
+                self.func = data
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag == "a":
+                self.in_a = False
+
+    funcparser = FuncParser()
+
+    # Parse Doxygen functions
+    for filename in [
+        f"globals_func_{chr(i)}.html" for i in range(ord("a"), ord("z") + 1)
+    ] + ["globals_func.html"]:
+        with open(
+            os.path.join(doxygen_html_path, filename), encoding="utf-8"
+        ) as globals_file:
+            for line in globals_file.readlines():
+                if line.startswith("<li>"):
+                    funcparser.reset()
+                    funcparser.feed(line)
+                    assert funcparser.func
+                    func_name = funcparser.func[: funcparser.func.find("(")]
+                    rizin.doxygen_funcs[func_name] = funcparser.mappings
 
 ### RzList
 list_h = Header("rz_list.h")
@@ -122,7 +188,7 @@ ModuleEnum(types_h, prefix="RZ_PERM_")
 
 ### rz_core_t ###
 core_h = Header("rz_core.h")
-rizin.headers.add(Header("rz_cmp.h"))  # RzCoreCmpWatcher
+Header("rz_cmp.h")  # for RzCoreCmpWatcher
 rz_core = ModuleClass(
     core_h,
     struct="rz_core_t",
@@ -302,5 +368,15 @@ rz_main.add_destructor(main_h, "rz_main_free")
 rz_main.add_prefixed_methods(main_h, "rz_main_")
 rz_main.add_prefixed_funcs(main_h, "rz_main_")
 
-with open(cast(str, args.output), "w", encoding="utf-8") as output:
+output_path = cast(str, args.output)
+with open(os.path.join(output_path, "rizin.i"), "w", encoding="utf-8") as output:
     rizin.write_io(output)
+
+if rizin.enable_sphinx:
+    sphinx_path = os.path.join(output_path, "sphinx")
+    try:
+        os.mkdir(sphinx_path)
+    except FileExistsError:
+        pass
+
+    rizin.write_sphinx(sphinx_path)

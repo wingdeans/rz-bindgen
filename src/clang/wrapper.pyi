@@ -23,6 +23,23 @@ class TypeKind(PyEnum):
     VOID: TypeKind
     BOOL: TypeKind
 
+    # stringify_type_py
+    TYPEDEF: TypeKind
+
+    SCHAR: TypeKind
+    CHAR_S: TypeKind
+    UCHAR: TypeKind
+    CHAR_U: TypeKind
+
+    USHORT: TypeKind
+    UINT: TypeKind
+    ULONG: TypeKind
+    ULONGLONG: TypeKind
+    SHORT: TypeKind
+    INT: TypeKind
+    LONG: TypeKind
+    LONGLONG: TypeKind
+
 class TypeBase:
     spelling: str
     def get_canonical(self) -> Type:
@@ -62,7 +79,7 @@ class Void(TypeBase):
 
 class Bool(TypeBase):
     kind: Literal[TypeKind.BOOL]
-    
+
 Type = Union[Array, IncompleteArray, Pointer, FuncType, Void, Bool]
 
 """
@@ -108,7 +125,7 @@ class CursorBase:
     spelling: str
     translation_unit: TranslationUnit
 
-    attrs: Set[str] # Addiitonal attr to store RZ_* annotations
+    attrs: Set[str]  # Addiitonal attr to store RZ_* annotations
 
 class RootCursor(CursorBase):
     kind: Literal[CursorKind.TRANSLATION_UNIT]
@@ -181,7 +198,7 @@ class AnnotateAttr(CursorBase):
 class EnumField(CursorBase):
     kind: Literal[CursorKind.ENUM_CONSTANT_DECL]
     enum_value: int
-    
+
 Cursor = Union[
     Macro,
     Var,
@@ -194,5 +211,5 @@ Cursor = Union[
     StructUnionField,
     Typeref,
     AnnotateAttr,
-    EnumField
+    EnumField,
 ]

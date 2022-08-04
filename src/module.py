@@ -5,7 +5,8 @@ SPDX-License-Identifier: LGPL-3.0-only
 Specifies the rizin SWIG %module
 """
 
-from typing import List, Dict, OrderedDict, Set, Optional, TextIO, TYPE_CHECKING
+from typing import List, Dict, OrderedDict, Set, Tuple, Optional, TextIO, TYPE_CHECKING
+import os
 
 from clang.cindex import SourceRange
 from clang.wrapper import Cursor, CursorKind, Type, TypeKind
@@ -35,6 +36,10 @@ class Module:
 
     directors: List["ModuleDirector"]
 
+    enable_sphinx: bool
+    doxygen_html_path: Optional[str]
+    doxygen_funcs: Dict[str, List[Tuple[str, str]]]
+
     def __init__(self) -> None:
         self.headers = set()
         self.classes = []
@@ -43,6 +48,10 @@ class Module:
         self.generics = OrderedDict()
         self.generic_mappings = {}
         self.directors = []
+
+        self.enable_sphinx = False
+        self.doxygen_html_path = None
+        self.doxygen_funcs = {}
 
     def get_generic_name(self, type_: Type) -> Optional[str]:
         """
@@ -173,6 +182,64 @@ class Module:
 
         return f"{type_name or type_.spelling} {name}"
 
+    def stringify_type_py(
+        self, cursor: Cursor, type_: Type, *, generic: bool = False
+    ) -> Optional[str]:
+        """
+        Converts a type to a Python type (eg. ut64 -> int)
+
+        The cursor attribute is used to extract the generic specialization
+        (eg. RzList[RzBinSymbol])
+        """
+        generic_name = self.get_generic_name(type_)
+        if generic_name == "void":
+            if generic:
+                return "T"
+        elif generic_name:
+            if generic:
+                return f"{generic_name}[T]"
+            specialization = self.add_generic_specialization(cursor, generic_name)
+            return f"{generic_name}[{specialization}]"
+
+        if type_.kind == TypeKind.POINTER:
+            pointee = type_.get_pointee()
+            if pointee.kind in [
+                TypeKind.SCHAR,
+                TypeKind.CHAR_S,
+                TypeKind.UCHAR,
+                TypeKind.CHAR_U,
+            ]:
+                return "str"
+            if pointee.kind in [TypeKind.TYPEDEF]:
+                return pointee.spelling
+
+        if type_.kind in [TypeKind.TYPEDEF]:
+            return type_.spelling
+
+        if type_.kind == TypeKind.BOOL:
+            return "bool"
+
+        if type_.kind in [
+            TypeKind.UCHAR,
+            TypeKind.CHAR_U,
+            TypeKind.USHORT,
+            TypeKind.UINT,
+            TypeKind.ULONG,
+            TypeKind.ULONGLONG,
+            TypeKind.SCHAR,
+            TypeKind.CHAR_S,
+            TypeKind.SHORT,
+            TypeKind.INT,
+            TypeKind.LONG,
+            TypeKind.LONGLONG,
+        ]:
+            return "int"
+
+        if type_.kind == TypeKind.VOID:
+            return None
+
+        return f'"{type_.spelling}"'
+
     def write_io(self, output: TextIO) -> None:
         """
         Writes self to opened file or stdout
@@ -230,6 +297,42 @@ class Module:
             director.write(writer)
 
         writer.line("%include <rizin_post.i>")
+
+    def write_sphinx(self, path: str) -> None:
+        """
+        Writes documentation to <output>/sphinx directory
+        """
+
+        with open(os.path.join(path, "conf.py"), "w", encoding="utf-8") as output:
+            assert self.doxygen_html_path
+            doxygen_html_path = os.path.abspath(self.doxygen_html_path)
+
+            writer = DirectWriter(output)
+            writer.line(
+                "project = 'rz-bindings'",
+                "html_theme = 'furo'",
+                "",
+                "import shutil",
+                "import os",
+                "def setup(app):",
+                "    shutil.copytree(",
+                f"        '{doxygen_html_path}',",
+                "        os.path.join(app.outdir, 'doxygen'),",
+                "        dirs_exist_ok=True",
+                "    )",
+            )
+
+        with open(os.path.join(path, "index.rst"), "w", encoding="utf-8") as output:
+            writer = DirectWriter(output)
+            writer.line(
+                "Rizin Python Bindings",
+                "=====================",
+                ".. toctree::",
+            )
+
+            for cls in self.classes:
+                cls.write_sphinx(path)
+                writer.line("   " + cls.name)
 
 
 # The rizin %module is the only SWIG module

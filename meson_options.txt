@@ -3,3 +3,5 @@ option('clang_args', type: 'string', value: '')
 option('rizin_inc_path', type: 'string', value: '')
 
 option('plugin', type: 'feature', value: 'disabled')
+
+option('doxygen_html_path', type: 'string', value: '')

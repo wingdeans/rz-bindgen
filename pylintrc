@@ -5,4 +5,5 @@ disable=consider-using-in,
 	too-many-branches,
 	too-many-statements,
 	too-many-instance-attributes,
-	too-few-public-methods
+	too-few-public-methods,
+	too-many-return-statements

@@ -63,7 +63,7 @@ class ModuleGeneric:
         header: Header,
         name: str,
         *,
-        rename: Optional[str] = None,
+        rename: str,
         generic_ret: bool = False,
         generic_args: Optional[Set[str]] = None,
     ) -> None:
