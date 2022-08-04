@@ -102,6 +102,7 @@ if sphinx_enabled
       find_program('sphinx-build'),
       '@INPUT@',
       '@OUTPUT@'
-    ]
+    ],
+    build_by_default: true
   )
 endif

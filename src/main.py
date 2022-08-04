@@ -58,6 +58,7 @@ if doxygen_html_path is not None:
     rizin.doxygen_html_path = doxygen_html_path
 
     class FuncParser(HTMLParser):
+        # pylint: disable-msg=W0223
         """
         Parse doxygen globals_func.html list elements
         """
@@ -106,10 +107,16 @@ if doxygen_html_path is not None:
         with open(
             os.path.join(doxygen_html_path, filename), encoding="utf-8"
         ) as globals_file:
+            # pylint: disable-msg=C0103
+            in_li = False
             for line in globals_file.readlines():
                 if line.startswith("<li>"):
+                    in_li = True
                     funcparser.reset()
+                if in_li:
                     funcparser.feed(line)
+                if line.rstrip().endswith("</li>"):
+                    in_li = False
                     assert funcparser.func
                     func_name = funcparser.func[: funcparser.func.find("(")]
                     rizin.doxygen_funcs[func_name] = funcparser.mappings

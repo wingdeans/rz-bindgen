@@ -131,6 +131,7 @@ class ModuleFunc:
                     [f"`{filename} <doxygen/{href}>`__" for href, filename in mappings]
                 )
                 self.sphinx.line(
+                    "",
                     f"   ``{func.spelling}``: " + links,
                 )
 

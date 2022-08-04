@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Deploy Github Pages
-    runs-on: ubuntu-latest
+  build:
+    name: Build rz-bindings reference
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout rizin
       uses: actions/checkout@v3
@@ -20,32 +20,45 @@ jobs:
         repository: wingdeans/rizin
         ref: header-types
         path: rizin
-
     - name: Install deps
       run: |
-        pip install meson ninja
+        sudo pip install meson ninja sphinx furo
         sudo apt update
-        sudo apt install doxygen
-
+        sudo apt install libclang-14-dev doxygen
     - name: Build rizin
+      working-directory: rizin
       run: |
         meson setup build
-        ninja -C build
-      working-directory: rizin
-
+        sudo meson install -C build
     - name: Run doxygen
-      run: |
-        doxygen
       working-directory: rizin
-
+      run: doxygen
     - name: Checkout rz-bindgen
       uses: actions/checkout@v3
       with:
         path: rz-bindgen
-
     - name: Run rz-bindgen
-      run: |
-        meson setup -Drizin_inc_path="$GITHUB_WORKSPACE/rizin/include" \
-                    -Ddoxygen_html_path="$GITHUB_WORKSPACE/rizin/doc/doxygen/html" build
-        ninja -C build
       working-directory: rz-bindgen
+      run: |
+        meson setup -Ddoxygen_html_path="$GITHUB_WORKSPACE/rizin/doc/doxygen/html" build
+        ninja -C build
+    - name: Configure Pages
+      uses: actions/configure-pages@v1
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v1
+      with:
+        path: rz-bindgen/build/sphinx_output
+  deploy:
+    name: Deploy to Github Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v1
