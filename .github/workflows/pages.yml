@@ -24,11 +24,18 @@ jobs:
     - name: Install deps
       run: |
         pip install meson ninja
+        sudo apt update
+        sudo apt install doxygen
 
     - name: Build rizin
       run: |
         meson setup build
         ninja -C build
+      working-directory: rizin
+
+    - name: Run doxygen
+      run: |
+        doxygen
       working-directory: rizin
 
     - name: Checkout rz-bindgen
@@ -38,6 +45,7 @@ jobs:
 
     - name: Run rz-bindgen
       run: |
-        meson setup -Drizin_inc_path="$GITHUB_WORKSPACE/rizin/include" build
+        meson setup -Drizin_inc_path="$GITHUB_WORKSPACE/rizin/include" \
+                    -Ddoxygen_html_path="$GITHUB_WORKSPACE/rizin/doc/doxygen/html" build
         ninja -C build
       working-directory: rz-bindgen
