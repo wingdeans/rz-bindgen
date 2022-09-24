@@ -11,6 +11,7 @@ before-all = "bash {project}/cibw_before_all.sh"
 manylinux-x86_64-image = "manylinux_2_24"
 manylinux-i686-image = "manylinux_2_24"
 skip = "pp*"
+repair-wheel-command = ""
 
 [tool.cibuildwheel.windows]
 environment = { CMAKE_PREFIX_PATH="C:\\rizin" }
