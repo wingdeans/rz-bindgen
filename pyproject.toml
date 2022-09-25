@@ -17,6 +17,10 @@ repair-wheel-command = ""
 environment = { CMAKE_PREFIX_PATH="C:\\rizin" }
 archs = ["AMD64"]
 
+[tool.cibuildwheel.linux]
+before-build = "pip install auditwheel"
+repair-wheel-command = "python3 auditwheel_whitelisted.py repair -w {dest_dir} {wheel}"
+
 [project]
 name = "rz-bindings"
 version = "0.0.1"
