@@ -23,6 +23,6 @@ repair-wheel-command = "python3 auditwheel_whitelisted.py repair -w {dest_dir} {
 
 [project]
 name = "rz-bindings"
-version = "0.0.1"
+version = "0.0.2"
 requires-python = ">=3.8"
 readme = "README.md"
