@@ -82,7 +82,7 @@ if target_swig
       '-outdir', '@OUTDIR@', '@INPUT@'
     ],
     install: true,
-    install_dir: [false, py.get_install_dir()]
+    install_dir: [py.get_install_dir(), false]
   )
   swig_py = swig_output[0]
   swig_wrap = swig_output[1]
