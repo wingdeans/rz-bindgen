@@ -17,9 +17,9 @@ git clone --depth 1 https://github.com/wingdeans/rizin.git -b header-types
 pushd rizin
 
 if [[ "$OSTYPE" =~ msys* ]]; then
-    meson setup --prefix='c:/rizin' --vsenv build
+    meson setup --buildtype=release --prefix='c:/rizin' --vsenv build
 else
-    meson setup --libdir=lib build
+    meson setup --buildtype=release --libdir=lib build
 fi
 
 meson install -C build
