@@ -12,8 +12,6 @@ elif command -v apk; then
     apk update && apk add clang-dev
 fi
 
-# Install rizin
-git clone --depth 1 https://github.com/wingdeans/rizin.git -b header-types
 pushd rizin
 
 if [[ "$OSTYPE" =~ msys* ]]; then

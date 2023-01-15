@@ -1,0 +1,36 @@
+name: reusable-run-rz-bindgen
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+
+jobs:
+  reusable-run-bindgen:
+    name: Run bindgen
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-latest]
+
+    steps:
+    - name: Checkout rz-bindgen
+      uses: actions/checkout@v3
+
+    - name: Checkout rizin
+      uses: actions/checkout@v3
+      with:
+        repository: rizinorg/rizin
+        path: rizin
+        ref: ${{ inputs.ref }}
+
+    - name: Run rz-bindgen
+      uses: pypa/cibuildwheel@v2.8.0
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        path: wheelhouse/*.whl
