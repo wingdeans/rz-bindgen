@@ -245,6 +245,7 @@ def bind_cmd(cmd_h: Header) -> None:
     RzCmd
     """
     Class(cmd_h, typedef="RzCmd")
+    Class(cmd_h, typedef="RzCmdDesc", ignore_fields={"d"})
     Class(cmd_h, typedef="RzCmdDescHelp")
     Class(cmd_h, typedef="RzCmdDescArg")
     Enum(cmd_h, typedef="RzCmdArgType")
