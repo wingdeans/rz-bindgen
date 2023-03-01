@@ -183,7 +183,7 @@ def bind_asm(asm_h: Header) -> None:
     RzAsm
     """
     Class(asm_h, typedef="RzAsm")  # TODO: Add functions
-    Class(asm_h, typedef="RzAsmPlugin")
+    Director(asm_h, "RzAsmPlugin")
 
 
 @threaded_header("rz_bin.h")
